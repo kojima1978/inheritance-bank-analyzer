@@ -22,7 +22,6 @@ if df.empty:
     st.stop()
 
 # 日付型変換（DBから読み込むと文字列になるため）
-# 日付型変換（DBから読み込むと文字列になるため）
 df["date"] = pd.to_datetime(df["date"]).dt.date
 
 # 必要なカラムがない場合のチェック
@@ -43,18 +42,44 @@ from lib import llm_classifier
 
 # サイドバーに分析実行ボタン
 with st.sidebar:
-    st.markdown("### 🤖 形質分析")
-    if st.button("AI分類を実行", type="primary"):
-        with st.spinner("AIが取引内容を分析中... (Ollama)"):
-            try:
-                # 分類実行
-                df = llm_classifier.classify_transactions(df)
-                # DB保存
-                db_manager.save_transactions(current_case, df)
-                st.success("分析完了！")
-                st.rerun()
-            except Exception as e:
-                st.error(f"エラー: {e}")
+    st.markdown("### 🤖 自動分類")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("🤖 AI分類", type="primary", use_container_width=True):
+            # Ollama利用可能かチェック
+            ollama_available = llm_classifier.check_ollama_available()
+
+            if ollama_available:
+                with st.spinner("AI分類実行中..."):
+                    try:
+                        # AI分類実行（Ollama使用）
+                        df = llm_classifier.classify_transactions(df, use_ollama=True)
+                        # DB保存
+                        db_manager.save_transactions(current_case, df)
+                        st.success("✅ AI分類完了！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"エラー: {e}")
+            else:
+                st.warning("⚠️ Ollamaが起動していません。ルールベース分類を使用してください。")
+
+    with col2:
+        if st.button("📝 ルール分類", use_container_width=True):
+            with st.spinner("ルールベース分類実行中..."):
+                try:
+                    # ルールベース分類実行（Ollama不使用）
+                    df = llm_classifier.classify_transactions(df, use_ollama=False)
+                    # DB保存
+                    db_manager.save_transactions(current_case, df)
+                    st.success("✅ ルールベース分類完了！")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"エラー: {e}")
+
+    st.caption("**🤖 AI分類**: Ollama使用（高精度・要起動）")
+    st.caption("**📝 ルール分類**: 設定パターン使用（高速・安定）")
 
 # 口座サマリーを表示
 st.markdown("### 📋 登録口座一覧")
@@ -92,33 +117,83 @@ with tab1:
     st.subheader("資金移動の分析")
     # 資金移動フラグがあるもののみ抽出
     transfers = df[df["is_transfer"] == True]
-    
+
     if transfers.empty:
         st.info("検知された資金移動はありません。")
     else:
         # 出金側のみを見る（ペアの片方）
         out_transfers = transfers[transfers["amount_out"] > 0].copy()
-        
+
         if out_transfers.empty:
              st.info("表示可能な資金移動フローがありません。")
         else:
             # データ加工
             out_transfers["target_account"] = out_transfers["transfer_to"].apply(lambda x: x.split(" ")[0] if x else "Unknown")
             out_transfers["flow_label"] = out_transfers["account_id"] + " ➡ " + out_transfers["target_account"]
-            
-            # 1. 集計テーブル表示
-            st.markdown("#### 📋 口座間移動 集計表")
-            summary_df = out_transfers.groupby(["account_id", "target_account"]).agg(
-                count=("amount_out", "count"),
-                total_amount=("amount_out", "sum")
-            ).reset_index()
-            summary_df.columns = ["出金元口座", "入金先口座", "回数", "合計金額"]
-            st.dataframe(summary_df, use_container_width=True)
+
+            # 1. 個別取引リスト表示
+            st.markdown("#### 📋 口座間移動 取引一覧")
+            st.caption(f"検出された資金移動: {len(out_transfers)}件")
+
+            # ペアの入金取引情報を取得
+            display_list = []
+            for idx, out_row in out_transfers.iterrows():
+                # 入金側の取引を検索
+                transfer_info = out_row["transfer_to"]
+                if transfer_info and " " in transfer_info:
+                    parts = transfer_info.split(" ")
+                    in_account = parts[0]
+                    in_date_str = " ".join(parts[1:])
+
+                    # 入金側の取引を探す（日付の型を統一）
+                    in_tx = df[
+                        (df["account_id"] == in_account) &
+                        (df["date"] == out_row["date"]) &
+                        (df["amount_in"] > 0)
+                    ]
+
+                    if not in_tx.empty:
+                        in_row = in_tx.iloc[0]
+                        display_list.append({
+                            "日付": out_row["date"],
+                            "出金元口座": out_row["account_id"],
+                            "出金額": f"{int(out_row['amount_out']):,}",
+                            "出金摘要": out_row["description"],
+                            "入金先口座": in_account,
+                            "入金額": f"{int(in_row['amount_in']):,}",
+                            "入金摘要": in_row["description"],
+                            "名義人": out_row["holder"]
+                        })
+                    else:
+                        # 入金側が見つからない場合
+                        display_list.append({
+                            "日付": out_row["date"],
+                            "出金元口座": out_row["account_id"],
+                            "出金額": f"{int(out_row['amount_out']):,}",
+                            "出金摘要": out_row["description"],
+                            "入金先口座": in_account,
+                            "入金額": "未検出",
+                            "入金摘要": "未検出",
+                            "名義人": out_row["holder"]
+                        })
+
+            if display_list:
+                display_transfers = pd.DataFrame(display_list)
+                # 日付降順でソート
+                display_transfers = display_transfers.sort_values("日付", ascending=False)
+
+                st.dataframe(
+                    display_transfers,
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("表示可能な資金移動がありません。")
 
             # 2. タイムライン・散布図
             st.markdown("#### 📅 資金移動タイムライン")
             st.caption("いつ、どの口座間で、どれくらいの金額が動いたかを時系列で表示します。")
-            
+
             fig = px.scatter(
                 out_transfers,
                 x="date",
@@ -150,17 +225,42 @@ with tab2:
 
 with tab3:
     st.subheader("取引一覧")
-    
+
     # フィルタ
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         filter_account = st.multiselect("口座絞り込み", df["account_id"].unique())
     with col2:
+        # カテゴリーフィルタ（分類済みのもののみ）
+        available_categories = df[df["category"].notna()]["category"].unique().tolist()
+        if available_categories:
+            filter_category = st.multiselect("分類絞り込み", ["未分類"] + sorted(available_categories))
+        else:
+            filter_category = []
+            st.caption("分類を実行すると絞り込みできます")
+    with col3:
         keyword = st.text_input("摘要検索")
-        
+
     filtered_df = df.copy()
     if filter_account:
         filtered_df = filtered_df[filtered_df["account_id"].isin(filter_account)]
+    if filter_category:
+        # 「未分類」が選択されている場合
+        if "未分類" in filter_category:
+            # 未分類のみ、または未分類+他のカテゴリー
+            other_categories = [c for c in filter_category if c != "未分類"]
+            if other_categories:
+                # 未分類 OR 指定カテゴリー
+                filtered_df = filtered_df[
+                    filtered_df["category"].isna() |
+                    filtered_df["category"].isin(other_categories)
+                ]
+            else:
+                # 未分類のみ
+                filtered_df = filtered_df[filtered_df["category"].isna()]
+        else:
+            # 指定カテゴリーのみ
+            filtered_df = filtered_df[filtered_df["category"].isin(filter_category)]
     if keyword:
         filtered_df = filtered_df[filtered_df["description"].str.contains(keyword, na=False)]
         
