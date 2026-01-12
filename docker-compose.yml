@@ -1,6 +1,9 @@
+version: '3.8'
+
 services:
   app:
     build: .
+    container_name: inheritance-bank-analyzer
     ports:
       - "8501:8501"
     volumes:
@@ -14,15 +17,27 @@ services:
       - TRANSFER_DAYS_WINDOW=3
       - TRANSFER_AMOUNT_TOLERANCE=1000
     depends_on:
-      - ollama
-    restart: always
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   ollama:
     image: ollama/ollama:latest
+    container_name: ollama-service
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
     # GPUを使用する場合（NVIDIA Container Toolkitが必要）
     # deploy:
     #   resources:
@@ -31,7 +46,20 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
-    restart: always
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   ollama_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
