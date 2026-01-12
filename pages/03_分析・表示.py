@@ -262,11 +262,11 @@ with tab3:
     with col2:
         # カテゴリーフィルタ（分類済みのもののみ）
         available_categories = df[df["category"].notna()]["category"].unique().tolist()
-        if available_categories:
-            filter_category = st.multiselect("分類絞り込み", ["未分類"] + sorted(available_categories))
-        else:
-            filter_category = []
-            st.caption("分類を実行すると絞り込みできます")
+        # "未分類"がDBに含まれている場合があるので重複排除
+        unique_options = sorted(list(set(["未分類"] + available_categories)), key=lambda x: (x != "未分類", x))
+        
+        filter_category = st.multiselect("分類絞り込み", unique_options)
+
     with col3:
         keyword = st.text_input("摘要検索")
 
@@ -279,21 +279,170 @@ with tab3:
             # 未分類のみ、または未分類+他のカテゴリー
             other_categories = [c for c in filter_category if c != "未分類"]
             if other_categories:
-                # 未分類 OR 指定カテゴリー
+                # 未分類 (NaN or "未分類") OR 指定カテゴリー
                 filtered_df = filtered_df[
                     filtered_df["category"].isna() |
+                    (filtered_df["category"] == "未分類") |
                     filtered_df["category"].isin(other_categories)
                 ]
             else:
-                # 未分類のみ
-                filtered_df = filtered_df[filtered_df["category"].isna()]
+                # 未分類のみ (NaN or "未分類")
+                filtered_df = filtered_df[
+                    filtered_df["category"].isna() | 
+                    (filtered_df["category"] == "未分類")
+                ]
         else:
             # 指定カテゴリーのみ
             filtered_df = filtered_df[filtered_df["category"].isin(filter_category)]
     if keyword:
         filtered_df = filtered_df[filtered_df["description"].str.contains(keyword, na=False)]
-        
-    # カラム名を日本語に変換
+
+    # 分類修正UI（取引一覧の上部に配置）
+    st.markdown("### ✏️ 分類修正")
+
+    # 取引一覧を表形式で表示し、各行に修正ボタンを配置
+    if not filtered_df.empty:
+        # すべての表示対象取引を編集可能にする（未分類含む）
+        editable_df = filtered_df.copy()
+
+        if not editable_df.empty:
+            st.markdown(f"**修正可能な取引: {len(editable_df)}件**")
+
+            # ページネーション設定
+            items_per_page = 20
+            total_pages = (len(editable_df) - 1) // items_per_page + 1
+
+            # ページ選択
+            if total_pages > 1:
+                page = st.number_input("ページ", min_value=1, max_value=total_pages, value=1, step=1)
+                start_idx = (page - 1) * items_per_page
+                end_idx = min(start_idx + items_per_page, len(editable_df))
+                page_df = editable_df.iloc[start_idx:end_idx]
+                st.caption(f"表示中: {start_idx + 1}～{end_idx}件 / 全{len(editable_df)}件")
+            else:
+                page_df = editable_df
+
+            # 各取引を表示
+            for idx, row in page_df.iterrows():
+                tx_id_key = row['id']
+                with st.container(border=True):
+                    col1, col2, col3, col4 = st.columns([2, 3, 2, 1])
+
+                    with col1:
+                        st.markdown(f"**{row['date']}**")
+                        st.caption(f"{row['account_id'][:20]}...")
+
+                    with col2:
+                        # 摘要を表示（長い場合は省略）
+                        desc_short = row['description'][:40] + "..." if len(row['description']) > 40 else row['description']
+                        st.markdown(f"📝 {desc_short}")
+
+                        # 金額表示
+                        if row['amount_out'] > 0:
+                            st.caption(f"払戻: ¥{int(row['amount_out']):,}")
+                        if row['amount_in'] > 0:
+                            st.caption(f"お預り: ¥{int(row['amount_in']):,}")
+
+                    with col3:
+                        # 現在の分類を表示
+                        category_emoji = {
+                            "生活費": "🛒",
+                            "贈与": "🎁",
+                            "関連会社": "🏢",
+                            "銀行": "🏦",
+                            "証券会社": "📈",
+                            "保険会社": "🛡️",
+                            "未分類": "❓",
+                            "その他": "📄",
+                            # 旧カテゴリのフォールバック
+                            "資産形成": "💰",
+                            "贈与疑い": "⚠️"
+                        }
+                        current_cat = row['category']
+                        
+                        if pd.isna(current_cat) or current_cat == "未分類":
+                            display_cat = "未分類"
+                            emoji = "❓"
+                            # データ上がNoneなら未分類として扱う
+                            if pd.isna(current_cat):
+                                current_cat = "未分類" 
+                        else:
+                            display_cat = current_cat
+                            emoji = category_emoji.get(current_cat, "📄")
+                            
+                        st.markdown(f"現在: {emoji} **{display_cat}**")
+
+                    with col4:
+                        # 修正ボタン
+                        if st.button("✏️ 修正", key=f"edit_{tx_id_key}"):
+                            st.session_state[f"editing_tx_{tx_id_key}"] = True
+                            st.rerun()
+
+                    # 修正フォーム（ボタンクリック時に表示）
+                    if st.session_state.get(f"editing_tx_{tx_id_key}", False):
+                        st.markdown("---")
+
+                        # 同じ摘要を持つ取引数を表示
+                        matching_count = len(df[df["description"] == row["description"]])
+                        if matching_count > 1:
+                            st.info(f"💡 この摘要を持つ取引が **{matching_count}件** あります。すべて一括で修正されます。")
+
+                        st.markdown("**分類を修正:**")
+
+                        col_cat, col_btn = st.columns([3, 1])
+
+                        with col_cat:
+                            # ユーザー指定のカテゴリリスト
+                            categories = [
+                                "生活費", "贈与", "関連会社", "銀行", 
+                                "証券会社", "保険会社", "未分類", "その他"
+                            ]
+                            # current_catがリストにない場合（旧カテゴリなど）は先頭を選択状態に
+                            current_index = categories.index(current_cat) if current_cat in categories else 0
+                            new_category = st.selectbox(
+                                "正しい分類",
+                                options=categories,
+                                index=current_index,
+                                key=f"cat_select_{tx_id_key}"
+                            )
+
+                        with col_btn:
+                            st.write("")  # スペース調整
+                            st.write("")  # スペース調整
+                            if st.button("💾 保存", key=f"save_{tx_id_key}", type="primary"):
+                                # 同じ摘要の取引をすべて更新
+                                matching_txs = df[df["description"] == row["description"]]
+                                success_count = 0
+
+                                for match_idx in matching_txs.index:
+                                    target_tx_id = df.loc[match_idx, "id"]
+                                    result = db_manager.update_transaction_category(current_case, target_tx_id, new_category)
+                                    if result:
+                                        success_count += 1
+
+                                # 編集状態をクリア
+                                if f"editing_tx_{tx_id_key}" in st.session_state:
+                                    del st.session_state[f"editing_tx_{tx_id_key}"]
+
+                                # 成功メッセージをsession_stateに保存
+                                st.session_state["category_update_success"] = f"✅ {success_count}件の取引を「{new_category}」に修正しました！"
+
+                                # データベースから再読み込みして即座に反映
+                                st.rerun()
+
+                        # キャンセルボタン
+                        if st.button("✖️ キャンセル", key=f"cancel_{tx_id_key}"):
+                            if f"editing_tx_{tx_id_key}" in st.session_state:
+                                del st.session_state[f"editing_tx_{tx_id_key}"]
+                            st.rerun()
+        else:
+            st.info("修正可能な取引がありません。")
+    else:
+        st.info("表示する取引がありません。")
+
+    # 全取引一覧（参照用）
+    st.markdown("---")
+    st.markdown("### 📊 全取引一覧（参照用）")
     display_df = filtered_df[["date", "category", "account_id", "holder", "description", "amount_out", "amount_in", "balance", "is_large", "is_transfer", "transfer_to"]].copy()
     display_df.columns = ["日付", "分類", "口座ID", "名義人", "摘要", "払戻", "お預り", "残高", "多額取引", "資金移動", "移動先"]
 

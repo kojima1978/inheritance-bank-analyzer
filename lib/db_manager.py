@@ -111,3 +111,30 @@ def delete_account_transactions(case_name: str, account_id: str) -> bool:
     except Exception as e:
         print(f"口座削除エラー: {e}")
         return False
+
+def update_transaction_category(case_name: str, transaction_id: int, new_category: str) -> bool:
+    """取引のカテゴリを更新"""
+    db_path = get_case_db_path(case_name)
+    if not os.path.exists(db_path):
+        return False
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # IDがnumpy型などの場合、intに変換
+        if hasattr(transaction_id, 'item'):
+            transaction_id = transaction_id.item()
+            
+        cursor.execute("""
+            UPDATE transactions
+            SET category = ?
+            WHERE id = ?
+        """, (new_category, transaction_id))
+        conn.commit()
+        row_count = cursor.rowcount
+        conn.close()
+        return row_count > 0
+    except Exception as e:
+        print(f"カテゴリ更新エラー: {e}")
+        return False

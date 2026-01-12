@@ -122,14 +122,21 @@ default_patterns = {
         "ガソリン", "ENEOS", "出光", "昭和シェル",
         "マクドナルド", "スターバックス", "スタバ", "コンビニ"
     ],
-    "資産形成": [
-        "証券", "野村", "大和", "SMBC", "みずほ証券", "楽天証券", "SBI",
-        "投資信託", "株式", "債券", "ファンド",
-        "生命保険", "損保", "保険", "共済", "かんぽ", "日本生命", "第一生命",
+    "贈与": [
+        "フリコミ", "振込", "送金"
+    ],
+    "関連会社": [
+        "商事", "物産", "興業", "実業", "有限会社", "株式会社" 
+    ],
+    "銀行": [
         "定期預金", "定期", "積立"
     ],
-    "贈与疑い": [
-        "フリコミ", "振込", "送金"
+    "証券会社": [
+        "証券", "野村", "大和", "SMBC", "みずほ証券", "楽天証券", "SBI",
+        "投資信託", "株式", "債券", "ファンド"
+    ],
+    "保険会社": [
+        "生命保険", "損保", "保険", "共済", "かんぽ", "日本生命", "第一生命"
     ],
     "その他": [
         "手数料", "利息", "ATM", "時間外", "引出", "預入"
@@ -139,8 +146,9 @@ default_patterns = {
 # 現在のパターンを読み込み（設定ファイルになければデフォルト）
 current_patterns = current_settings.get("CLASSIFICATION_PATTERNS", default_patterns)
 
-# タブでカテゴリーごとに編集
-pattern_tabs = st.tabs(["生活費", "資産形成", "贈与疑い", "その他"])
+# タブでカテゴリーごとに編集（順序定義）
+category_order = ["生活費", "贈与", "関連会社", "銀行", "証券会社", "保険会社", "その他"]
+pattern_tabs = st.tabs(category_order)
 
 edited_patterns = {}
 
@@ -156,28 +164,61 @@ with pattern_tabs[0]:
     edited_patterns["生活費"] = [kw.strip() for kw in life_keywords.split(",") if kw.strip()]
 
 with pattern_tabs[1]:
-    st.markdown("**資産形成のキーワード**")
-    st.caption("証券会社、投資、保険、定期預金など")
-    asset_keywords = st.text_area(
-        "キーワード（カンマ区切り）",
-        value=", ".join(current_patterns.get("資産形成", default_patterns["資産形成"])),
-        height=150,
-        key="asset"
-    )
-    edited_patterns["資産形成"] = [kw.strip() for kw in asset_keywords.split(",") if kw.strip()]
-
-with pattern_tabs[2]:
-    st.markdown("**贈与疑いのキーワード**")
-    st.caption("振込、送金など（100万円以上の場合に適用）")
+    st.markdown("**贈与のキーワード**")
+    st.caption("振込、送金など（100万円以上の場合に適用されます。少額の場合は保留または生活費とみなされることがあります）")
     gift_keywords = st.text_area(
         "キーワード（カンマ区切り）",
-        value=", ".join(current_patterns.get("贈与疑い", default_patterns["贈与疑い"])),
+        value=", ".join(current_patterns.get("贈与", default_patterns["贈与"])),
         height=100,
         key="gift"
     )
-    edited_patterns["贈与疑い"] = [kw.strip() for kw in gift_keywords.split(",") if kw.strip()]
+    edited_patterns["贈与"] = [kw.strip() for kw in gift_keywords.split(",") if kw.strip()]
+
+with pattern_tabs[2]:
+    st.markdown("**関連会社のキーワード**")
+    st.caption("同族会社、取引先などの法人名キーワード")
+    rel_keywords = st.text_area(
+        "キーワード（カンマ区切り）",
+        value=", ".join(current_patterns.get("関連会社", default_patterns["関連会社"])),
+        height=100,
+        key="related"
+    )
+    edited_patterns["関連会社"] = [kw.strip() for kw in rel_keywords.split(",") if kw.strip()]
 
 with pattern_tabs[3]:
+    st.markdown("**銀行（定期・積立）のキーワード**")
+    st.caption("定期預金、積立など、通常の入出金以外の銀行取引")
+    bank_keywords = st.text_area(
+        "キーワード（カンマ区切り）",
+        value=", ".join(current_patterns.get("銀行", default_patterns["銀行"])),
+        height=100,
+        key="bank"
+    )
+    edited_patterns["銀行"] = [kw.strip() for kw in bank_keywords.split(",") if kw.strip()]
+
+with pattern_tabs[4]:
+    st.markdown("**証券会社のキーワード**")
+    st.caption("証券会社名、投資関連用語など")
+    sec_keywords = st.text_area(
+        "キーワード（カンマ区切り）",
+        value=", ".join(current_patterns.get("証券会社", default_patterns["証券会社"])),
+        height=100,
+        key="securities"
+    )
+    edited_patterns["証券会社"] = [kw.strip() for kw in sec_keywords.split(",") if kw.strip()]
+
+with pattern_tabs[5]:
+    st.markdown("**保険会社のキーワード**")
+    st.caption("保険会社名、共済など")
+    ins_keywords = st.text_area(
+        "キーワード（カンマ区切り）",
+        value=", ".join(current_patterns.get("保険会社", default_patterns["保険会社"])),
+        height=100,
+        key="insurance"
+    )
+    edited_patterns["保険会社"] = [kw.strip() for kw in ins_keywords.split(",") if kw.strip()]
+
+with pattern_tabs[6]:
     st.markdown("**その他のキーワード**")
     st.caption("手数料、利息、ATMなど")
     other_keywords = st.text_area(

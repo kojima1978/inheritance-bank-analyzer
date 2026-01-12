@@ -16,13 +16,20 @@ def load_classification_patterns():
             "ガソリン", "ENEOS", "出光", "昭和シェル",
             "マクドナルド", "スターバックス", "スタバ", "コンビニ"
         ],
-        "資産形成": [
+        "証券会社": [
             "証券", "野村", "大和", "SMBC", "みずほ証券", "楽天証券", "SBI",
-            "投資信託", "株式", "債券", "ファンド",
-            "生命保険", "損保", "保険", "共済", "かんぽ", "日本生命", "第一生命",
+            "投資信託", "株式", "債券", "ファンド"
+        ],
+        "保険会社": [
+            "生命保険", "損保", "保険", "共済", "かんぽ", "日本生命", "第一生命"
+        ],
+        "銀行": [
             "定期預金", "定期", "積立"
         ],
-        "贈与疑い": [
+        "関連会社": [
+            "商事", "物産", "興業", "実業", "有限会社", "株式会社" 
+        ],
+        "贈与": [
             "フリコミ", "振込", "送金"
         ],
         "その他": [
@@ -52,29 +59,30 @@ def classify_by_rules(text: str, amount_out: int, amount_in: int) -> str:
     # 設定ファイルからパターンを読み込み
     patterns = load_classification_patterns()
 
-    life_keywords = patterns.get("生活費", [])
-    asset_keywords = patterns.get("資産形成", [])
-    gift_keywords = patterns.get("贈与疑い", [])
-    other_keywords = patterns.get("その他", [])
+    # 優先順位: 生活費 -> 証券/保険/銀行/関連会社 -> 贈与 -> その他
+    # ※贈与（振込）はキーワードが汎用的なので後回しにするか、金額条件を入れる
+    
+    for cat in ["生活費", "証券会社", "保険会社", "銀行", "関連会社"]:
+        keywords = patterns.get(cat, [])
+        for kw in keywords:
+            if kw in text:
+                return cat
 
-    # カテゴリ判定
-    for keyword in life_keywords:
-        if keyword in text:
-            return "生活費"
-
-    for keyword in asset_keywords:
-        if keyword in text:
-            return "資産形成"
-
-    # 振込の場合、金額で判断
+    # 贈与判定（振込など）
+    gift_keywords = patterns.get("贈与", [])
     if any(kw in text for kw in gift_keywords):
         if amount_out >= 1_000_000:  # 100万円以上の振込
-            return "贈与疑い"
+            return "贈与"
         else:
-            return "生活費"
+            # 少額の振込は生活費の可能性も高いが、一旦その他か生活費へ
+            # ここでは「生活費」に倒すか「その他」にするか。
+            # 汎用的な振込は判断難しいが、一旦生活費とする（または未分類的なその他）
+            return "その他"
 
-    for keyword in other_keywords:
-        if keyword in text:
+    # その他キーワード
+    other_keywords = patterns.get("その他", [])
+    for kw in other_keywords:
+        if kw in text:
             return "その他"
 
     # どれにも該当しない場合はその他
@@ -161,8 +169,11 @@ def call_ollama(text: str) -> str:
 
     カテゴリ候補:
     - 生活費 (スーパー、コンビニ、水道光熱費、通信費、NHKなど)
-    - 資産形成 (証券会社、定期預金作成、保険料など)
-    - 贈与疑い (家族名義への振込、使途不明な個人への送金など)
+    - 贈与 (家族名義への振込、使途不明な個人への送金など)
+    - 関連会社 (同族会社、取引先などの法人関連)
+    - 銀行 (定期預金、積立、銀行手数料以外の手続き)
+    - 証券会社 (証券口座への入出金、配当金、投資信託)
+    - 保険会社 (保険料、共済掛金、給付金)
     - その他 (手数料、利息、不明なもの)
 
     摘要: {text}
@@ -179,7 +190,9 @@ def call_ollama(text: str) -> str:
         if response.status_code == 200:
             result = response.json().get("response", "").strip()
             # 想定外の回答が含まれていないか簡易チェック
-            valid_categories = ["生活費", "資産形成", "贈与疑い", "その他"]
+            valid_categories = ["生活費", "贈与", "関連会社", "銀行", "証券会社", "保険会社", "その他"]
+            
+            # 部分一致で判定（LLMが余計な文字をつける場合があるため）
             for cat in valid_categories:
                 if cat in result:
                     return cat
