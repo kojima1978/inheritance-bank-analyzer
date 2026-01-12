@@ -43,6 +43,14 @@ python -m streamlit run main.py
 
 アプリケーションが起動したら、ブラウザで http://localhost:8501 にアクセスしてください。
 
+### 3. Dockerで実行する場合
+
+```bash
+docker compose up -d
+```
+
+起動後、http://localhost:8501 にアクセスしてください。
+
 ## 使い方
 
 ### ステップ1: 案件作成
@@ -146,7 +154,6 @@ TRANSFER_AMOUNT_TOLERANCE = 500         # 資金移動判定の金額誤差（�
 - 複数年度の比較機能
 - 手動修正機能
 - PDFレポート出力
-- Docker対応
 
 ## ライセンス
 Proprietary
