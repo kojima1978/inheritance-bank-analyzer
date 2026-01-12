@@ -10,6 +10,9 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434/api/generate
       - OLLAMA_MODEL=gemma2:2b
+      - LARGE_AMOUNT_THRESHOLD=50000
+      - TRANSFER_DAYS_WINDOW=3
+      - TRANSFER_AMOUNT_TOLERANCE=1000
     depends_on:
       - ollama
     restart: always

@@ -9,7 +9,7 @@ OCR済み通帳CSVを読み込み、相続税調査で注目すべきポイン�
 - **軽量**: PythonとStreamlitのみで動作
 - **自動検知機能**:
   - 口座間資金移動の自動ペアリング（金額・日付近接性で判定）
-  - 多額取引フラグ（閾値: 100万円）
+  - 多額取引フラグ（閾値: 5万円）
   - 残高整合性チェック
 
 ## 動作環境
@@ -129,9 +129,9 @@ inheritance-bank-analyzer/
 `lib/config.py` で以下の設定を変更できます。
 
 ```python
-LARGE_AMOUNT_THRESHOLD = 1_000_000      # 多額取引の閾値（円）
+LARGE_AMOUNT_THRESHOLD = 50_000       # 多額取引の閾値（円）
 TRANSFER_DAYS_WINDOW = 3                # 資金移動判定の日付誤差（日）
-TRANSFER_AMOUNT_TOLERANCE = 500         # 資金移動判定の金額誤差（円）
+TRANSFER_AMOUNT_TOLERANCE = 1_000       # 資金移動判定の金額誤差（円）
 ```
 
 ## トラブルシューティング

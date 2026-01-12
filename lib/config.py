@@ -27,7 +27,7 @@ user_settings = load_user_settings()
 # 閾値設定（優先順位: 環境変数 > ユーザー設定ファイル > デフォルト値）
 LARGE_AMOUNT_THRESHOLD = int(os.getenv(
     "LARGE_AMOUNT_THRESHOLD",
-    user_settings.get("LARGE_AMOUNT_THRESHOLD", 1_000_000)
+    user_settings.get("LARGE_AMOUNT_THRESHOLD", 50_000)
 ))  # 円
 
 TRANSFER_DAYS_WINDOW = int(os.getenv(
@@ -37,7 +37,7 @@ TRANSFER_DAYS_WINDOW = int(os.getenv(
 
 TRANSFER_AMOUNT_TOLERANCE = int(os.getenv(
     "TRANSFER_AMOUNT_TOLERANCE",
-    user_settings.get("TRANSFER_AMOUNT_TOLERANCE", 500)
+    user_settings.get("TRANSFER_AMOUNT_TOLERANCE", 1_000)
 ))  # 円
 
 # Ollama設定

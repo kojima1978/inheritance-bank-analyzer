@@ -39,15 +39,43 @@ else:
 
                     if not accounts.empty:
                         st.caption("📊 登録口座:")
-                        for _, row in accounts.iterrows():
+                        for idx, row in accounts.iterrows():
                             # account_idから銀行名と口座番号を抽出
                             parts = row['account_id'].rsplit('_', 1)
                             if len(parts) == 2:
                                 bank_name = parts[0]
                                 account_num = parts[1]
-                                st.markdown(f"　・**{bank_name}** / 口座番号: {account_num} / 名義: {row['holder']}")
+                                account_display = f"**{bank_name}** / 口座番号: {account_num} / 名義: {row['holder']}"
                             else:
-                                st.markdown(f"　・{row['account_id']} / 名義: {row['holder']}")
+                                account_display = f"{row['account_id']} / 名義: {row['holder']}"
+
+                            # 口座ごとに削除ボタン
+                            acc_col1, acc_col2 = st.columns([5, 1])
+                            with acc_col1:
+                                st.markdown(f"　・{account_display}")
+                            with acc_col2:
+                                if st.button("🗑️", key=f"delete_acc_{case}_{row['account_id']}", help="この口座のデータを削除"):
+                                    st.session_state[f"confirm_delete_acc_{case}_{row['account_id']}"] = True
+                                    st.rerun()
+
+                            # 口座削除の確認ダイアログ
+                            if st.session_state.get(f"confirm_delete_acc_{case}_{row['account_id']}", False):
+                                st.warning(f"⚠️ 口座「{row['account_id']}」のデータを削除しますか？")
+                                st.caption("この操作は取り消せません。")
+
+                                acc_yes, acc_no = st.columns(2)
+                                with acc_yes:
+                                    if st.button("削除", key=f"confirm_acc_yes_{case}_{row['account_id']}", type="primary"):
+                                        if db_manager.delete_account_transactions(case, row['account_id']):
+                                            del st.session_state[f"confirm_delete_acc_{case}_{row['account_id']}"]
+                                            st.success(f"口座「{row['account_id']}」を削除しました。")
+                                            st.rerun()
+                                        else:
+                                            st.error("削除に失敗しました。")
+                                with acc_no:
+                                    if st.button("キャンセル", key=f"confirm_acc_no_{case}_{row['account_id']}"):
+                                        del st.session_state[f"confirm_delete_acc_{case}_{row['account_id']}"]
+                                        st.rerun()
                 else:
                     st.caption("データ未登録")
 
@@ -69,19 +97,18 @@ else:
                 col_yes, col_no = st.columns(2)
                 with col_yes:
                     if st.button("はい、削除します", key=f"confirm_yes_{case}", type="primary"):
-                        # 案件フォルダを削除
-                        case_dir = os.path.join(config.DATA_DIR, case)
-                        if os.path.exists(case_dir):
-                            shutil.rmtree(case_dir)
+                        # db_managerの削除関数を使用
+                        if db_manager.delete_case(case):
+                            # 現在選択中の案件が削除対象の場合、セッション状態をクリア
+                            if st.session_state.get("current_case") == case:
+                                del st.session_state["current_case"]
 
-                        # 現在選択中の案件が削除対象の場合、セッション状態をクリア
-                        if st.session_state.get("current_case") == case:
-                            del st.session_state["current_case"]
+                            # 確認フラグをクリア
+                            del st.session_state[f"confirm_delete_{case}"]
 
-                        # 確認フラグをクリア
-                        del st.session_state[f"confirm_delete_{case}"]
-
-                        st.success(f"案件「{case}」を削除しました。")
+                            st.success(f"案件「{case}」を削除しました。")
+                        else:
+                            st.error("削除に失敗しました。")
                         st.rerun()
 
                 with col_no:

@@ -36,10 +36,10 @@ col1, col2 = st.columns(2)
 with col1:
     large_amount = st.number_input(
         "多額取引の閾値（円）",
-        min_value=100_000,
+        min_value=10_000,
         max_value=100_000_000,
-        value=current_settings.get("LARGE_AMOUNT_THRESHOLD", 1_000_000),
-        step=100_000,
+        value=current_settings.get("LARGE_AMOUNT_THRESHOLD", 50_000),
+        step=50_000,
         help="この金額以上の取引を「多額取引」として検出します"
     )
 
@@ -71,7 +71,7 @@ with col2:
         "金額の許容誤差（円）",
         min_value=0,
         max_value=10_000,
-        value=current_settings.get("TRANSFER_AMOUNT_TOLERANCE", 500),
+        value=current_settings.get("TRANSFER_AMOUNT_TOLERANCE", 1_000),
         step=100,
         help="出金額と入金額の差がこの範囲内であれば資金移動として判定します"
     )

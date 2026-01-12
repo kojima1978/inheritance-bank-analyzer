@@ -6,6 +6,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 環境変数のデフォルト値設定
+ENV LARGE_AMOUNT_THRESHOLD=50000
+ENV TRANSFER_DAYS_WINDOW=3
+ENV TRANSFER_AMOUNT_TOLERANCE=1000
+
 # アプリケーションコードをコピー
 COPY . .
 
