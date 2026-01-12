@@ -1,0 +1,7 @@
+streamlit
+pandas
+polars
+plotly
+openpyxl
+kaleido
+requests
